@@ -81,8 +81,8 @@ class DataLoaderS(object):
             excerpt = index[start_idx:end_idx]
             X = inputs[excerpt]
             Y = targets[excerpt]
-            X = X.to(self.device)
-            Y = Y.to(self.device)
+            #X = X.to(self.device)
+            #Y = Y.to(self.device)
             yield Variable(X), Variable(Y)
             start_idx += batch_size
 

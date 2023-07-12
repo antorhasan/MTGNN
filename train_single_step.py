@@ -73,7 +73,7 @@ def train(data, X, Y, model, criterion, optim, batch_size):
                 id = perm[j * num_sub:(j + 1) * num_sub]
             else:
                 id = perm[j * num_sub:]
-            id = torch.tensor(id).to(device)
+            id = torch.tensor(id) #.to(device)
             tx = X[:, :, id, :]
             ty = Y[:, id]
             output = model(tx,id)
@@ -103,7 +103,7 @@ parser.add_argument('--optim', type=str, default='adam')
 parser.add_argument('--L1Loss', type=bool, default=True)
 parser.add_argument('--normalize', type=int, default=2)
 parser.add_argument('--device',type=str,default='cuda:1',help='')
-parser.add_argument('--gcn_true', type=bool, default=True, help='whether to add graph convolution layer')
+parser.add_argument('--gcn_true', type=bool, default=False, help='whether to add graph convolution layer')
 parser.add_argument('--buildA_true', type=bool, default=True, help='whether to construct adaptive adjacency matrix')
 parser.add_argument('--gcn_depth',type=int,default=2,help='graph convolution depth')
 parser.add_argument('--num_nodes',type=int,default=137,help='number of nodes/variables')
@@ -150,7 +150,7 @@ def main():
                   skip_channels=args.skip_channels, end_channels= args.end_channels,
                   seq_length=args.seq_in_len, in_dim=args.in_dim, out_dim=args.seq_out_len,
                   layers=args.layers, propalpha=args.propalpha, tanhalpha=args.tanhalpha, layer_norm_affline=False)
-    model = model.to(device)
+    #model = model.to(device)
 
     print(args)
     print('The recpetive field size is', model.receptive_field)
