@@ -83,17 +83,17 @@ class gtnet(nn.Module):
             self.skipE = nn.Conv2d(in_channels=residual_channels, out_channels=skip_channels, kernel_size=(1, 1), bias=True)
 
 
-        self.idx = torch.arange(self.num_nodes).to(device)
+        self.idx = torch.arange(self.num_nodes) #.to(device)
 
 
     def forward(self, input, idx=None):
+        #print(input.size())
+        #print(asd)
         seq_len = input.size(3)
         assert seq_len==self.seq_length, 'input sequence length not equal to preset sequence length'
 
         if self.seq_length<self.receptive_field:
             input = nn.functional.pad(input,(self.receptive_field-self.seq_length,0,0,0))
-
-
 
         if self.gcn_true:
             if self.buildA_true:

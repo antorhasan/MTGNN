@@ -26,7 +26,7 @@ class DataLoaderS(object):
         self.scale = torch.from_numpy(self.scale).float()
         tmp = self.test[1] * self.scale.expand(self.test[1].size(0), self.m)
 
-        self.scale = self.scale.to(device)
+        #self.scale = self.scale.to(device)
         self.scale = Variable(self.scale)
 
         self.rse = normal_std(tmp)
