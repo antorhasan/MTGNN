@@ -73,7 +73,7 @@ def train(data, X, Y, model, criterion, optim, batch_size):
                 id = perm[j * num_sub:(j + 1) * num_sub]
             else:
                 id = perm[j * num_sub:]
-            id = torch.tensor(id) #.to(device)
+            id = torch.tensor(id).to(device)
             tx = X[:, :, id, :]
             ty = Y[:, id]
             output = model(tx,id)
@@ -93,22 +93,23 @@ def train(data, X, Y, model, criterion, optim, batch_size):
 
 
 parser = argparse.ArgumentParser(description='PyTorch Time series forecasting')
-parser.add_argument('--data', type=str, default='./data/solar_AL.txt',
+parser.add_argument('--data', type=str, default='./data/sinr.txt',
                     help='location of the data file')
+parser.add_argument('--num_nodes',type=int,default=5,help='number of nodes/variables')
+parser.add_argument('--subgraph_size',type=int,default=5,help='k')
 parser.add_argument('--log_interval', type=int, default=2000, metavar='N',
                     help='report interval')
-parser.add_argument('--save', type=str, default='model/model.pt',
+parser.add_argument('--save', type=str, default='./models/model_sinr.pt',
                     help='path to save the final model')
 parser.add_argument('--optim', type=str, default='adam')
 parser.add_argument('--L1Loss', type=bool, default=True)
 parser.add_argument('--normalize', type=int, default=2)
-parser.add_argument('--device',type=str,default='cuda:1',help='')
-parser.add_argument('--gcn_true', type=bool, default=False, help='whether to add graph convolution layer')
+parser.add_argument('--device',type=str,default='cuda:0',help='')
+parser.add_argument('--gcn_true', type=bool, default=True, help='whether to add graph convolution layer')
 parser.add_argument('--buildA_true', type=bool, default=True, help='whether to construct adaptive adjacency matrix')
 parser.add_argument('--gcn_depth',type=int,default=2,help='graph convolution depth')
-parser.add_argument('--num_nodes',type=int,default=137,help='number of nodes/variables')
 parser.add_argument('--dropout',type=float,default=0.3,help='dropout rate')
-parser.add_argument('--subgraph_size',type=int,default=20,help='k')
+
 parser.add_argument('--node_dim',type=int,default=40,help='dim of nodes')
 parser.add_argument('--dilation_exponential',type=int,default=2,help='dilation exponential')
 parser.add_argument('--conv_channels',type=int,default=16,help='convolution channels')
@@ -142,7 +143,7 @@ torch.set_num_threads(3)
 def main():
 
     Data = DataLoaderS(args.data, 0.6, 0.2, device, args.horizon, args.seq_in_len, args.normalize)
-
+    
     model = gtnet(args.gcn_true, args.buildA_true, args.gcn_depth, args.num_nodes,
                   device, dropout=args.dropout, subgraph_size=args.subgraph_size,
                   node_dim=args.node_dim, dilation_exponential=args.dilation_exponential,
@@ -150,7 +151,7 @@ def main():
                   skip_channels=args.skip_channels, end_channels= args.end_channels,
                   seq_length=args.seq_in_len, in_dim=args.in_dim, out_dim=args.seq_out_len,
                   layers=args.layers, propalpha=args.propalpha, tanhalpha=args.tanhalpha, layer_norm_affline=False)
-    #model = model.to(device)
+    model = model.to(device)
 
     print(args)
     print('The recpetive field size is', model.receptive_field)

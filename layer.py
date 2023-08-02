@@ -182,7 +182,7 @@ class graph_constructor(nn.Module):
 
         a = torch.mm(nodevec1, nodevec2.transpose(1,0))-torch.mm(nodevec2, nodevec1.transpose(1,0))
         adj = F.relu(torch.tanh(self.alpha*a))
-        mask = torch.zeros(idx.size(0), idx.size(0)) #.to(self.device)
+        mask = torch.zeros(idx.size(0), idx.size(0)).to(self.device)
         mask.fill_(float('0'))
         s1,t1 = (adj + torch.rand_like(adj)*0.01).topk(self.k,1)
         mask.scatter_(1,t1,s1.fill_(1))

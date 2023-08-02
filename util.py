@@ -18,6 +18,7 @@ class DataLoaderS(object):
         self.rawdat = np.loadtxt(fin, delimiter=',')
         self.dat = np.zeros(self.rawdat.shape)
         self.n, self.m = self.dat.shape
+        print(f"n: {self.n}",f"m: {self.m}")
         self.normalize = 2
         self.scale = np.ones(self.m)
         self._normalized(normalize)
@@ -26,7 +27,7 @@ class DataLoaderS(object):
         self.scale = torch.from_numpy(self.scale).float()
         tmp = self.test[1] * self.scale.expand(self.test[1].size(0), self.m)
 
-        #self.scale = self.scale.to(device)
+        self.scale = self.scale.to(device)
         self.scale = Variable(self.scale)
 
         self.rse = normal_std(tmp)
@@ -81,8 +82,8 @@ class DataLoaderS(object):
             excerpt = index[start_idx:end_idx]
             X = inputs[excerpt]
             Y = targets[excerpt]
-            #X = X.to(self.device)
-            #Y = Y.to(self.device)
+            X = X.to(self.device)
+            Y = Y.to(self.device)
             yield Variable(X), Variable(Y)
             start_idx += batch_size
 

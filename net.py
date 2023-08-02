@@ -20,6 +20,7 @@ class gtnet(nn.Module):
                                     out_channels=residual_channels,
                                     kernel_size=(1, 1))
         self.gc = graph_constructor(num_nodes, subgraph_size, node_dim, device, alpha=tanhalpha, static_feat=static_feat)
+        self.gc = self.gc.to(device)
 
         self.seq_length = seq_length
         kernel_size = 7
@@ -83,12 +84,13 @@ class gtnet(nn.Module):
             self.skipE = nn.Conv2d(in_channels=residual_channels, out_channels=skip_channels, kernel_size=(1, 1), bias=True)
 
 
-        self.idx = torch.arange(self.num_nodes) #.to(device)
+        self.idx = torch.arange(self.num_nodes).to(device)
 
 
     def forward(self, input, idx=None):
-        #print(input.size())
-        #print(asd)
+        # print(input.size())
+        # print(input.is_cuda)
+        # print(asd)
         seq_len = input.size(3)
         assert seq_len==self.seq_length, 'input sequence length not equal to preset sequence length'
 
@@ -132,4 +134,13 @@ class gtnet(nn.Module):
         x = F.relu(skip)
         x = F.relu(self.end_conv_1(x))
         x = self.end_conv_2(x)
+        
+
+        # write adjacancy matrix to file
+        with open('./logs/adj.txt', 'w') as f:
+            for i in range(adp.shape[0]):
+                for j in range(adp.shape[1]):
+                    f.write(str(adp[i][j].item()) + ' ')
+                f.write('\n')
+        
         return x
