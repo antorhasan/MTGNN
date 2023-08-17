@@ -4,11 +4,11 @@ import time
 
 import torch
 import torch.nn as nn
-from net import gtnet
+from net import gtnet,gtnet_ad
 import numpy as np
 import importlib
 
-from util import *
+from util import DataLoaderS,DataLoaderAD
 from trainer import Optim
 
 
@@ -36,10 +36,28 @@ def evaluate(data, X, Y, model, evaluateL2, evaluateL1, batch_size):
             test = torch.cat((test, Y))
 
         scale = data.scale.expand(output.size(0), data.m)
-        total_loss += evaluateL2(output * scale, Y * scale).item()
-        total_loss_l1 += evaluateL1(output * scale, Y * scale).item()
-        n_samples += (output.size(0) * data.m)
+        if args.approach == "AnomalyDetection":
+            Y = Y.to(torch.long)
+            # Perform one-hot encoding
+            # Create a one-hot encoding tensor
+            one_hot_tensor = torch.eye(2).to(device)
+            # Expand dimensions of the input tensor to match the desired output shape
+            Y = Y.unsqueeze(1)
+            # Use the one-hot tensor for indexing
+            Y = one_hot_tensor[Y]
+            Y = torch.squeeze(Y)
+            # Swap the axes to get the desired reshaping
+            Y = Y.permute(0, 2, 1)
+            total_loss += evaluateL2(output, Y).item()
+            total_loss_l1 += evaluateL1(output, Y).item()
+        else:
+            total_loss += evaluateL2(output * scale, Y * scale).item()
+            total_loss_l1 += evaluateL1(output * scale, Y * scale).item()
+            n_samples += (output.size(0) * data.m)
+        
+        break
 
+    
     rse = math.sqrt(total_loss / n_samples) / data.rse
     rae = (total_loss_l1 / n_samples) / data.rae
 
@@ -80,29 +98,53 @@ def train(data, X, Y, model, criterion, optim, batch_size):
             output = torch.squeeze(output)
             scale = data.scale.expand(output.size(0), data.m)
             scale = scale[:,id]
-            loss = criterion(output * scale, ty * scale)
+            if args.approach == "AnomalyDetection":
+                ty = ty.to(torch.long)
+                # Perform one-hot encoding
+                # Create a one-hot encoding tensor
+                one_hot_tensor = torch.eye(2).to(device)
+                # Expand dimensions of the input tensor to match the desired output shape
+                ty = ty.unsqueeze(1)
+                # Use the one-hot tensor for indexing
+                ty = one_hot_tensor[ty]
+                ty = torch.squeeze(ty)
+                # Swap the axes to get the desired reshaping
+                ty = ty.permute(0, 2, 1)
+                loss = criterion(output, ty)
+            else:
+                loss = criterion(output * scale, ty * scale)
+
             loss.backward()
             total_loss += loss.item()
             n_samples += (output.size(0) * data.m)
             grad_norm = optim.step()
+        
 
         if iter%100==0:
             print('iter:{:3d} | loss: {:.3f}'.format(iter,loss.item()/(output.size(0) * data.m)))
         iter += 1
+        break
     return total_loss / n_samples
 
 
 parser = argparse.ArgumentParser(description='PyTorch Time series forecasting')
-parser.add_argument('--data', type=str, default='./data/sinr.txt',
+parser.add_argument('--data', type=str, default='./data/sinr_label.txt',
                     help='location of the data file')
+parser.add_argument('--approach',type=str,default='AnomalyDetection',help='which approach to use. options: AnomalyDetection, None (original MTGNN)')
 parser.add_argument('--num_nodes',type=int,default=5,help='number of nodes/variables')
+parser.add_argument('--horizon', type=int, default=3)
+parser.add_argument('--seq_in_len',type=int,default=20,help='input sequence length')
+parser.add_argument('--seq_out_len',type=int,default=2,help='output sequence length')
+parser.add_argument('--batch_size',type=int,default=32,help='batch size')
+parser.add_argument('--Loss', type=str, default='BCE',help=f'loss function to use'
+                    f'options are : BCE, L1Loss')
 parser.add_argument('--subgraph_size',type=int,default=5,help='k')
 parser.add_argument('--log_interval', type=int, default=2000, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='./models/model_sinr.pt',
                     help='path to save the final model')
 parser.add_argument('--optim', type=str, default='adam')
-parser.add_argument('--L1Loss', type=bool, default=True)
+
 parser.add_argument('--normalize', type=int, default=2)
 parser.add_argument('--device',type=str,default='cuda:0',help='')
 parser.add_argument('--gcn_true', type=bool, default=True, help='whether to add graph convolution layer')
@@ -117,12 +159,11 @@ parser.add_argument('--residual_channels',type=int,default=16,help='residual cha
 parser.add_argument('--skip_channels',type=int,default=32,help='skip channels')
 parser.add_argument('--end_channels',type=int,default=64,help='end channels')
 parser.add_argument('--in_dim',type=int,default=1,help='inputs dimension')
-parser.add_argument('--seq_in_len',type=int,default=24*7,help='input sequence length')
-parser.add_argument('--seq_out_len',type=int,default=1,help='output sequence length')
-parser.add_argument('--horizon', type=int, default=3)
+
+
 parser.add_argument('--layers',type=int,default=5,help='number of layers')
 
-parser.add_argument('--batch_size',type=int,default=32,help='batch size')
+
 parser.add_argument('--lr',type=float,default=0.0001,help='learning rate')
 parser.add_argument('--weight_decay',type=float,default=0.00001,help='weight decay rate')
 
@@ -141,10 +182,12 @@ device = torch.device(args.device)
 torch.set_num_threads(3)
 
 def main():
-
-    Data = DataLoaderS(args.data, 0.6, 0.2, device, args.horizon, args.seq_in_len, args.normalize)
+    if args.approach == "AnomalyDetection":
+        Data = DataLoaderAD(args.data, 0.7, 0.2, device, args.horizon, args.seq_in_len, args.num_nodes, args.normalize)
+    else:
+        Data = DataLoaderS(args.data, 0.6, 0.2, device, args.horizon, args.seq_in_len, args.normalize)
     
-    model = gtnet(args.gcn_true, args.buildA_true, args.gcn_depth, args.num_nodes,
+    model = gtnet_ad(args.gcn_true, args.buildA_true, args.gcn_depth, args.num_nodes,
                   device, dropout=args.dropout, subgraph_size=args.subgraph_size,
                   node_dim=args.node_dim, dilation_exponential=args.dilation_exponential,
                   conv_channels=args.conv_channels, residual_channels=args.residual_channels,
@@ -158,12 +201,21 @@ def main():
     nParams = sum([p.nelement() for p in model.parameters()])
     print('Number of model parameters is', nParams, flush=True)
 
-    if args.L1Loss:
-        criterion = nn.L1Loss(size_average=False).to(device)
+    if args.approach == "AnomalyDetection":
+        if args.Loss == "BCE":
+            criterion = nn.CrossEntropyLoss().to(device)
     else:
-        criterion = nn.MSELoss(size_average=False).to(device)
-    evaluateL2 = nn.MSELoss(size_average=False).to(device)
-    evaluateL1 = nn.L1Loss(size_average=False).to(device)
+        if args.Loss=="L1Loss":
+            criterion = nn.L1Loss(size_average=False).to(device)
+        else:
+            criterion = nn.MSELoss(size_average=False).to(device)
+
+    if args.approach == "AnomalyDetection":
+        evaluateL1 = nn.CrossEntropyLoss().to(device)
+        evaluateL2 = nn.CrossEntropyLoss().to(device)
+    else:
+        evaluateL2 = nn.MSELoss(size_average=False).to(device)
+        evaluateL1 = nn.L1Loss(size_average=False).to(device)
 
 
     best_val = 10000000
