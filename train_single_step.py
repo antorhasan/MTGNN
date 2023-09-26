@@ -7,15 +7,20 @@ import torch.nn as nn
 from net import gtnet,gtnet_ad
 import numpy as np
 import importlib
+import wandb
 
 from util import DataLoaderS,DataLoaderAD
 from trainer import Optim
+from metrics import evaluate_metrics,evaluate_unweighted_macro_avg
 
 
 def evaluate(data, X, Y, model, evaluateL2, evaluateL1, batch_size):
     model.eval()
     total_loss = 0
     total_loss_l1 = 0
+    total_precision = 0
+    total_recall = 0
+    total_f1 = 0
     n_samples = 0
     predict = None
     test = None
@@ -50,26 +55,48 @@ def evaluate(data, X, Y, model, evaluateL2, evaluateL1, batch_size):
             Y = Y.permute(0, 2, 1)
             total_loss += evaluateL2(output, Y).item()
             total_loss_l1 += evaluateL1(output, Y).item()
+
+            # Perform argmax across the class dimension
+            n_samples += (output.size(0) * data.m)
+            output = torch.argmax(output, dim=1).cpu().numpy()
+            Y = torch.argmax(Y, dim=1).to(torch.int).cpu().numpy()
+
+            precision, recall, f1 = evaluate_metrics(output, Y)
+            total_precision += precision
+            total_recall += recall
+            total_f1 += f1
         else:
             total_loss += evaluateL2(output * scale, Y * scale).item()
             total_loss_l1 += evaluateL1(output * scale, Y * scale).item()
             n_samples += (output.size(0) * data.m)
-        
-        break
 
-    
-    rse = math.sqrt(total_loss / n_samples) / data.rse
-    rae = (total_loss_l1 / n_samples) / data.rae
+    if args.approach == "AnomalyDetection":
+        rse = total_loss / n_samples
 
-    predict = predict.data.cpu().numpy()
-    Ytest = test.data.cpu().numpy()
-    sigma_p = (predict).std(axis=0)
-    sigma_g = (Ytest).std(axis=0)
-    mean_p = predict.mean(axis=0)
-    mean_g = Ytest.mean(axis=0)
-    index = (sigma_g != 0)
-    correlation = ((predict - mean_p) * (Ytest - mean_g)).mean(axis=0) / (sigma_p * sigma_g)
-    correlation = (correlation[index]).mean()
+        wandb.log(
+                {
+                    "val_loss": total_loss / n_samples,
+                    "val_precision":total_precision / n_samples,
+                    "val_recall":total_recall / n_samples,
+                    "val_f1":total_f1 / n_samples,
+                    }
+                )
+
+        rae = 0
+        correlation = 0
+    else:
+        rse = math.sqrt(total_loss / n_samples) / data.rse
+        rae = (total_loss_l1 / n_samples) / data.rae
+
+        predict = predict.data.cpu().numpy()
+        Ytest = test.data.cpu().numpy()
+        sigma_p = (predict).std(axis=0)
+        sigma_g = (Ytest).std(axis=0)
+        mean_p = predict.mean(axis=0)
+        mean_g = Ytest.mean(axis=0)
+        index = (sigma_g != 0)
+        correlation = ((predict - mean_p) * (Ytest - mean_g)).mean(axis=0) / (sigma_p * sigma_g)
+        correlation = (correlation[index]).mean()
     return rse, rae, correlation
 
 
@@ -119,10 +146,15 @@ def train(data, X, Y, model, criterion, optim, batch_size):
             n_samples += (output.size(0) * data.m)
             grad_norm = optim.step()
         
-
+        
         if iter%100==0:
-            print('iter:{:3d} | loss: {:.3f}'.format(iter,loss.item()/(output.size(0) * data.m)))
+            print('iter:{:3d} | loss: {:.10f}'.format(iter,loss.item()/(output.size(0) * data.m)))
         iter += 1
+        wandb.log(
+            {
+                "train_loss": (total_loss / n_samples), 
+                }
+            )
         break
     return total_loss / n_samples
 
@@ -181,7 +213,20 @@ args = parser.parse_args()
 device = torch.device(args.device)
 torch.set_num_threads(3)
 
+wandb.login()
+
+run = wandb.init(
+    # Set the project where this run will be logged
+    project="mtgnn",
+    # Track hyperparameters and run metadata
+    config={
+        "learning_rate": args.lr,
+        "epochs": args.epochs,
+})
+
 def main():
+    
+
     if args.approach == "AnomalyDetection":
         Data = DataLoaderAD(args.data, 0.7, 0.2, device, args.horizon, args.seq_in_len, args.num_nodes, args.normalize)
     else:
@@ -231,9 +276,14 @@ def main():
             train_loss = train(Data, Data.train[0], Data.train[1], model, criterion, optim, args.batch_size)
             val_loss, val_rae, val_corr = evaluate(Data, Data.valid[0], Data.valid[1], model, evaluateL2, evaluateL1,
                                                args.batch_size)
-            print(
-                '| end of epoch {:3d} | time: {:5.2f}s | train_loss {:5.4f} | valid rse {:5.4f} | valid rae {:5.4f} | valid corr  {:5.4f}'.format(
-                    epoch, (time.time() - epoch_start_time), train_loss, val_loss, val_rae, val_corr), flush=True)
+            if args.approach == "AnomalyDetection":
+                print(
+                    '| end of epoch {:3d} | time: {:5.2f}s | train_loss {:5.4f} | valid loss {:5.4f} | valid rae {:5.4f}'.format(
+                        epoch, (time.time() - epoch_start_time), train_loss, val_loss), flush=True)
+            else:
+                print(
+                    '| end of epoch {:3d} | time: {:5.2f}s | train_loss {:5.4f} | valid rse {:5.4f} | valid rae {:5.4f} | valid corr  {:5.4f}'.format(
+                        epoch, (time.time() - epoch_start_time), train_loss, val_loss, val_rae, val_corr), flush=True)
             # Save the model if the validation loss is the best we've seen so far.
 
             if val_loss < best_val:
@@ -257,7 +307,10 @@ def main():
                                          args.batch_size)
     test_acc, test_rae, test_corr = evaluate(Data, Data.test[0], Data.test[1], model, evaluateL2, evaluateL1,
                                          args.batch_size)
-    print("final test rse {:5.4f} | test rae {:5.4f} | test corr {:5.4f}".format(test_acc, test_rae, test_corr))
+    if args.approach == "AnomalyDetection":
+        print("final test rse {:5.4f}".format(test_acc))
+    else:
+        print("final test rse {:5.4f} | test rae {:5.4f} | test corr {:5.4f}".format(test_acc, test_rae, test_corr))
     return vtest_acc, vtest_rae, vtest_corr, test_acc, test_rae, test_corr
 
 if __name__ == "__main__":

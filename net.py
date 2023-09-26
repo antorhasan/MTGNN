@@ -91,7 +91,7 @@ class gtnet_ad(nn.Module):
 
 
     def forward(self, input, idx=None):
-        print(f"input size: {input.size()}")
+        # print(f"input size: {input.size()}")
         
         seq_len = input.size(3)
         assert seq_len==self.seq_length, 'input sequence length not equal to preset sequence length'
@@ -99,7 +99,7 @@ class gtnet_ad(nn.Module):
         if self.seq_length<self.receptive_field:
             input = nn.functional.pad(input,(self.receptive_field-self.seq_length,0,0,0))
 
-        print(f"input size after padding : {input.size()}")
+        # print(f"input size after padding : {input.size()}")
 
         if self.gcn_true:
             if self.buildA_true:
@@ -114,7 +114,7 @@ class gtnet_ad(nn.Module):
 
         x = self.start_conv(input)
 
-        print(f"x start_conv : {x.size()}")
+        # print(f"x start_conv : {x.size()}")
         skip = self.skip0(F.dropout(input, self.dropout, training=self.training))
 
         for i in range(self.layers):
@@ -129,14 +129,14 @@ class gtnet_ad(nn.Module):
             s = self.skip_convs[i](s)
             skip = s + skip
 
-            print(f"x after layer {i} TC : {x.size()}")
+            # print(f"x after layer {i} TC : {x.size()}")
 
             if self.gcn_true:
                 x = self.gconv1[i](x, adp)+self.gconv2[i](x, adp.transpose(1,0))
             else:
                 x = self.residual_convs[i](x)
 
-            print(f"x after layer {i} GCN : {x.size()}")
+            # print(f"x after layer {i} GCN : {x.size()}")
 
             x = x + residual[:, :, :, -x.size(3):]
             if idx is None:
@@ -144,7 +144,7 @@ class gtnet_ad(nn.Module):
             else:
                 x = self.norm[i](x,idx)
 
-            print(f"x after layer {i} : {x.size()}")
+            # print(f"x after layer {i} : {x.size()}")
 
         skip = self.skipE(x) + skip
         x = F.relu(skip)
@@ -161,7 +161,7 @@ class gtnet_ad(nn.Module):
                     f.write(str(adp[i][j].item()) + ' ')
                 f.write('\n')
 
-        print(f"x output : {x.size()}")
+        # print(f"x output : {x.size()}")
         
         return x
 
