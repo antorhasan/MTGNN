@@ -5,6 +5,7 @@ import scipy.sparse as sp
 import torch
 from scipy.sparse import linalg
 from torch.autograd import Variable
+import matplotlib.pyplot as plt
 
 def normal_std(x):
     return x.std() * np.sqrt((len(x) - 1.)/(len(x)))
@@ -23,25 +24,54 @@ class DataLoaderAD(object):
         # sepearte labels
         self.labels = self.rawdat[:,-self.num_nodes:]
         self.rawdat = self.rawdat[:,:-self.num_nodes]
+
+        #print(f"labels : {self.labels}")
+        #print(f"features : {self.rawdat}")
         
         self.dat = np.zeros(self.rawdat.shape)
+        #print(f"self. dat : {self.dat}")
         self.n, self.m = self.dat.shape
-        print(f"n: {self.n}",f"m: {self.m}")
+        #print(f"n: {self.n}",f"m: {self.m}")
         self.normalize = 2
         self.scale = np.ones(self.m)
+
         self._normalized(normalize)
+
+        #print("after normalization")
+        #print(f"self.dat : {self.dat}")
+
+        # Plot feature distributions
+        self._plot_dist()
+
+        #print(f"self.scale : {self.scale}")
+
         self._split(int(train * self.n), int((train + valid) * self.n), self.n)
 
+        #print(f"train : {self.train}")
+        #print(f"val : {self.valid}")
+        #print(f"test : {self.test}")
+
         self.scale = torch.from_numpy(self.scale).float()
-        tmp = self.test[1] * self.scale.expand(self.test[1].size(0), self.m)
+        ##tmp = self.test[1] * self.scale.expand(self.test[1].size(0), self.m)
 
         self.scale = self.scale.to(device)
         self.scale = Variable(self.scale)
 
-        self.rse = normal_std(tmp)
-        self.rae = torch.mean(torch.abs(tmp - torch.mean(tmp)))
+        #self.rse = normal_std(tmp)
+        #self.rae = torch.mean(torch.abs(tmp - torch.mean(tmp)))
 
         self.device = device
+
+        #print(asd)
+
+    def _plot_dist(self):
+        "Plot feature distributions"
+        for i in range(self.m):
+            # Create a histogram
+            plt.hist(self.dat[:,i], bins='auto')  # arguments are passed to np.histogram
+            plt.title("Histogram with 'auto' bins")
+            plt.savefig(f"../data/figs/feature_{i}.png")
+            plt.close()
 
     def _normalized(self, normalize):
         # normalized by the maximum value of entire matrix.
@@ -66,17 +96,20 @@ class DataLoaderAD(object):
         self.train = self._batchify(train_set, self.h)
         self.valid = self._batchify(valid_set, self.h)
         self.test = self._batchify(test_set, self.h)
-
+        
     def _batchify(self, idx_set, horizon):
         n = len(idx_set)
-        X = torch.zeros((n, self.P, self.m))
-        Y = torch.zeros((n, self.m))
+        X = torch.zeros((n, self.P, self.num_nodes, int(self.m/self.num_nodes)))
+        Y = torch.zeros((n, self.num_nodes))
         for i in range(n):
             end = idx_set[i] - self.h + 1
             start = end - self.P
-            X[i, :, :] = torch.from_numpy(self.dat[start:end, :])
+            X[i, :, :] = torch.from_numpy(np.reshape(self.dat[start:end, :],(self.P,self.num_nodes,-1)))
             # split labels numpy array
+            #print(self.labels[idx_set[i], :].shape)
+            #print(Y[i,:].shape)
             Y[i, :] = torch.from_numpy(self.labels[idx_set[i], :])
+            
         return [X, Y]
 
     def get_batches(self, inputs, targets, batch_size, shuffle=True):

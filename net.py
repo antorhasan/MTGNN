@@ -91,15 +91,18 @@ class gtnet_ad(nn.Module):
 
 
     def forward(self, input, idx=None):
-        # print(f"input size: {input.size()}")
-        
+        #print(f"input size: {input.size()}")
+        #print(input)
         seq_len = input.size(3)
+
+        #print(f"sequence length : {seq_len}")
         assert seq_len==self.seq_length, 'input sequence length not equal to preset sequence length'
+        #print(f"sequence length : {seq_len}")
 
         if self.seq_length<self.receptive_field:
             input = nn.functional.pad(input,(self.receptive_field-self.seq_length,0,0,0))
-
-        # print(f"input size after padding : {input.size()}")
+        #print(f"receptive field size : {self.receptive_field}")
+        #print(f"input size after padding : {input.size()}")
 
         if self.gcn_true:
             if self.buildA_true:
@@ -111,10 +114,9 @@ class gtnet_ad(nn.Module):
             else:
                 adp = self.predefined_A
 
-
+        #print(input)
         x = self.start_conv(input)
-
-        # print(f"x start_conv : {x.size()}")
+        #print(f"x start_conv : {x.size()}")
         skip = self.skip0(F.dropout(input, self.dropout, training=self.training))
 
         for i in range(self.layers):
@@ -129,14 +131,14 @@ class gtnet_ad(nn.Module):
             s = self.skip_convs[i](s)
             skip = s + skip
 
-            # print(f"x after layer {i} TC : {x.size()}")
+            #print(f"x after layer {i} TC : {x.size()}")
 
             if self.gcn_true:
                 x = self.gconv1[i](x, adp)+self.gconv2[i](x, adp.transpose(1,0))
             else:
                 x = self.residual_convs[i](x)
 
-            # print(f"x after layer {i} GCN : {x.size()}")
+            #print(f"x after layer {i} GCN : {x.size()}")
 
             x = x + residual[:, :, :, -x.size(3):]
             if idx is None:
@@ -144,7 +146,7 @@ class gtnet_ad(nn.Module):
             else:
                 x = self.norm[i](x,idx)
 
-            # print(f"x after layer {i} : {x.size()}")
+            #print(f"x after layer {i} : {x.size()}")
 
         skip = self.skipE(x) + skip
         x = F.relu(skip)
@@ -161,9 +163,12 @@ class gtnet_ad(nn.Module):
                     f.write(str(adp[i][j].item()) + ' ')
                 f.write('\n')
 
-        # print(f"x output : {x.size()}")
+        #print(f"x output : {x.size()}")
+        #print(x)
         
         return x
+    
+    
 
 class gtnet(nn.Module):
     def __init__(self, gcn_true, buildA_true, gcn_depth, num_nodes, device, predefined_A=None, static_feat=None, dropout=0.3, subgraph_size=20, node_dim=40, dilation_exponential=1, conv_channels=32, residual_channels=32, skip_channels=64, end_channels=128, seq_length=12, in_dim=2, out_dim=12, layers=3, propalpha=0.05, tanhalpha=3, layer_norm_affline=True):
