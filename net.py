@@ -113,8 +113,7 @@ class gtnet_ad(nn.Module):
                     adp = self.gc(idx)
             else:
                 adp = self.predefined_A
-
-        #print(input)
+        
         x = self.start_conv(input)
         #print(f"x start_conv : {x.size()}")
         skip = self.skip0(F.dropout(input, self.dropout, training=self.training))

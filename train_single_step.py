@@ -210,19 +210,20 @@ def train(data, X, Y, model, criterion, optim, batch_size):
 
     return total_loss / iter
 
-
+NUM_NODES = 5
+INPUT_DIMENSION = 6
 parser = argparse.ArgumentParser(description='PyTorch Time series forecasting')
-parser.add_argument('--data', type=str, default='./data/calibrated_multi.txt',
+parser.add_argument('--data', type=str, default='../data/omni1/20240212_215449_MTGNN_AD.txt',
                     help='location of the data file')
 parser.add_argument('--approach',type=str,default='AnomalyDetection',help='which approach to use. options: AnomalyDetection, None (original MTGNN)')
-parser.add_argument('--num_nodes',type=int,default=4,help='number of nodes/variables')
+parser.add_argument('--num_nodes',type=int,default=NUM_NODES,help='number of nodes/variables')
 parser.add_argument('--horizon', type=int, default=1)
 parser.add_argument('--seq_in_len',type=int,default=20,help='input sequence length')
 parser.add_argument('--seq_out_len',type=int,default=2,help='output sequence length')
-parser.add_argument('--batch_size',type=int,default=128,help='batch size')
+parser.add_argument('--batch_size',type=int,default=64,help='batch size')
 parser.add_argument('--Loss', type=str, default='WCrossEntropy',help=f'loss function to use'
                     f'options are : BCE, L1Loss')
-parser.add_argument('--subgraph_size',type=int,default=4,help='k')
+parser.add_argument('--subgraph_size',type=int,default=NUM_NODES,help='k')
 parser.add_argument('--log_interval', type=int, default=2000, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='./models/model_sinr.pt',
@@ -242,19 +243,19 @@ parser.add_argument('--conv_channels',type=int,default=16,help='convolution chan
 parser.add_argument('--residual_channels',type=int,default=16,help='residual channels')
 parser.add_argument('--skip_channels',type=int,default=32,help='skip channels')
 parser.add_argument('--end_channels',type=int,default=64,help='end channels')
-parser.add_argument('--in_dim',type=int,default=7,help='inputs dimension')
+parser.add_argument('--in_dim',type=int,default=INPUT_DIMENSION,help='inputs dimension')
 
 parser.add_argument('--layers',type=int,default=5,help='number of layers')
 
-parser.add_argument('--lr',type=float,default=0.0001,help='learning rate')
-parser.add_argument('--weight_decay',type=float,default=0.0001,help='weight decay rate')
+parser.add_argument('--lr',type=float,default=0.001,help='learning rate')
+parser.add_argument('--weight_decay',type=float,default=0.00001,help='weight decay rate')
 
 parser.add_argument('--clip',type=int,default=5,help='clip')
 
 parser.add_argument('--propalpha',type=float,default=0.05,help='prop alpha')
 parser.add_argument('--tanhalpha',type=float,default=3,help='tanh alpha')
 
-parser.add_argument('--epochs',type=int,default=50,help='')
+parser.add_argument('--epochs',type=int,default=1000,help='')
 parser.add_argument('--num_split',type=int,default=1,help='number of splits for graphs')
 parser.add_argument('--step_size',type=int,default=100,help='step_size')
 
@@ -275,10 +276,12 @@ torch.set_num_threads(3)
 # })
 
 def main():
-    
+    train_size = 0.5
+    val_size = 0.4
+
 
     if args.approach == "AnomalyDetection":
-        Data = DataLoaderAD(args.data, 0.7, 0.2, device, args.horizon, args.seq_in_len, args.num_nodes, args.normalize)
+        Data = DataLoaderAD(args.data, train_size, val_size, device, args.horizon, args.seq_in_len, args.num_nodes, args.normalize)
     else:
         Data = DataLoaderS(args.data, 0.6, 0.2, device, args.horizon, args.seq_in_len, args.normalize)
     
